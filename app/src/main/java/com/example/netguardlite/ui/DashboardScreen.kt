@@ -13,34 +13,26 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.netguardlite.model.ConnectionType
+import com.example.netguardlite.model.NetworkStatus
+import com.example.netguardlite.model.TestResult
 
-// ---------- State layar (nanti diisi dari NetworkRepository / ViewModel) ----------
-
-data class DashboardState(
-    val connected: Boolean = false,
-    val connectionType: String = "Tidak terhubung",
-    val localIp: String? = null,
-    val gateway: String? = null,
-    val vpnActive: Boolean = false,
-    val testResult: String = "Belum dijalankan",
-    val testRunning: Boolean = false,
-
-//    Tambahan state untuk checklist keamanan
-    val securityChecklist: Map<String, Boolean> = mapOf(
-        "Menggunakan enkripsi WPA2/WPA3" to false,
-        "Sudah mengganti password default router" to false,
-        "Firmware router sudah diperbarui" to false,
-    )
+/** Item checklist manual: id disimpan di ViewModel, label ditampilkan di UI. */
+private val manualChecklist = listOf(
+    "wpa" to "Wi-Fi memakai WPA2/WPA3",
+    "admin" to "Password admin router sudah diganti dari bawaan",
+    "firmware" to "Firmware router sudah diperbarui",
+    "wps" to "WPS dimatikan"
 )
-
-// ---------- Layar utama ----------
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    state: DashboardState = DashboardState(),
-    onRunTest: () -> Unit = {},
-    onSecurityChanged: (String, Boolean) -> Unit = { _, _ -> }
+    status: NetworkStatus,
+    test: TestResult,
+    checked: Set<String>,
+    onRunTest: () -> Unit,
+    onToggleChecklist: (String) -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -63,31 +55,29 @@ fun DashboardScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item { StatusCard(state.connected) }
+            item { StatusCard(status) }
             item {
                 InfoCard(
                     rows = listOf(
-                        Triple(Icons.Filled.Wifi, "Jenis koneksi", state.connectionType),
-                        Triple(Icons.Filled.Dns, "IP lokal", state.localIp ?: "Tidak tersedia"),
-                        Triple(Icons.Filled.Router, "Gateway", state.gateway ?: "Tidak tersedia"),
-                        Triple(Icons.Filled.VpnKey, "VPN", if (state.vpnActive) "Aktif" else "Tidak aktif")
+                        Triple(Icons.Filled.Wifi, "Jenis koneksi", status.type.label),
+                        Triple(Icons.Filled.Dns, "IP lokal", status.localIp ?: "Tidak tersedia"),
+                        Triple(Icons.Filled.Router, "Gateway", status.gateway ?: "Tidak tersedia"),
+                        Triple(
+                            Icons.Filled.Dns, "DNS",
+                            status.dnsServers.joinToString().ifEmpty { "Tidak tersedia" }
+                        ),
+                        Triple(Icons.Filled.VpnKey, "VPN", if (status.vpnActive) "Aktif" else "Tidak aktif")
                     )
                 )
             }
-            item { TestCard(state.testResult, state.testRunning, onRunTest) }
+            item { TestCard(test, onRunTest) }
+            item { ChecklistCard(status, checked, onToggleChecklist) }
             item {
                 Text(
-                    "Hanya menampilkan kondisi yang terdeteksi. " +
+                    "Hanya menampilkan kondisi yang terdeteksi saat ini. " +
                             "Bukan audit keamanan penuh.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            item {
-                SecurityCard(
-                    checklist = state.securityChecklist,
-                    onCheckedChange = onSecurityChanged
                 )
             }
         }
@@ -97,66 +87,22 @@ fun DashboardScreen(
 // ---------- Komponen ----------
 
 @Composable
-private fun StatusCard(connected: Boolean) {
+private fun StatusCard(status: NetworkStatus) {
+    val (icon, text, good) = when {
+        !status.connected -> Triple(Icons.Filled.WifiOff, "Tidak terhubung", false)
+        status.validated -> Triple(Icons.Filled.CheckCircle, "Terhubung, internet terverifikasi", true)
+        else -> Triple(Icons.Filled.Warning, "Terhubung, internet belum terverifikasi", false)
+    }
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                imageVector = if (connected) Icons.Filled.CheckCircle else Icons.Filled.WifiOff,
+                imageVector = icon,
                 contentDescription = null,
-                tint = if (connected) MaterialTheme.colorScheme.tertiary
-                else MaterialTheme.colorScheme.error,
+                tint = if (good) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(36.dp)
             )
             Spacer(Modifier.width(12.dp))
-            Text(
-                if (connected) "Terhubung" else "Tidak terhubung",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-    }
-}
-
-@Composable
-private fun SecurityCard(
-    checklist: Map<String, Boolean>,
-    onCheckedChange: (String, Boolean) -> Unit
-) {
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                "Security Checklist",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                "Pemeriksaan manual untuk kebiasaan dan keamanan router.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            checklist.forEach { (item, isChecked) ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = item,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Checkbox(
-                        checked = isChecked,
-                        onCheckedChange = { checked ->
-                            onCheckedChange(item, checked)
-                        }
-                    )
-                }
-            }
+            Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -187,12 +133,21 @@ private fun InfoCard(rows: List<Triple<ImageVector, String, String>>) {
     }
 }
 
+private fun TestResult.describe(): String = when (this) {
+    TestResult.Idle -> "Belum dijalankan"
+    TestResult.Running -> "Menguji koneksi…"
+    is TestResult.Success -> "Berhasil (HTTP $httpCode) dalam $durationMs ms"
+    is TestResult.Failure -> "Gagal: $reason ($durationMs ms)"
+    is TestResult.Timeout -> "Gagal: waktu habis (lebih dari $limitMs ms)"
+}
+
 @Composable
-private fun TestCard(result: String, running: Boolean, onRun: () -> Unit) {
+private fun TestCard(result: TestResult, onRun: () -> Unit) {
+    val running = result is TestResult.Running
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Connectivity Test", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text(result, style = MaterialTheme.typography.bodyLarge)
+            Text(result.describe(), style = MaterialTheme.typography.bodyLarge)
             Button(onClick = onRun, enabled = !running) {
                 Text(if (running) "Menguji…" else "Run Test")
             }
@@ -200,20 +155,99 @@ private fun TestCard(result: String, running: Boolean, onRun: () -> Unit) {
     }
 }
 
-// ---------- Preview (lihat tampilan di Android Studio tanpa run ke HP) ----------
+@Composable
+private fun ChecklistCard(
+    status: NetworkStatus,
+    checked: Set<String>,
+    onToggle: (String) -> Unit
+) {
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Security Checklist", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+
+            // --- Terdeteksi otomatis (read-only) ---
+            Text(
+                "Terdeteksi otomatis",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            AutoRow("VPN aktif", if (status.vpnActive) "Terdeteksi aktif" else "Tidak terdeteksi", status.vpnActive)
+            AutoRow(
+                "Internet terverifikasi Android",
+                if (status.validated) "Ya" else "Tidak / belum",
+                status.validated
+            )
+            AutoRow("Jenis enkripsi Wi-Fi", "Tidak dapat dideteksi aplikasi ini, periksa manual", null)
+
+            HorizontalDivider()
+
+            // --- Manual ---
+            Text(
+                "Dicek manual oleh kamu",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            manualChecklist.forEach { (id, label) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Checkbox(checked = id in checked, onCheckedChange = { onToggle(id) })
+                }
+            }
+        }
+    }
+}
+
+/** ok: true = terdeteksi, false = tidak terdeteksi, null = tidak bisa ditentukan. */
+@Composable
+private fun AutoRow(title: String, detail: String, ok: Boolean?) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = when (ok) {
+                true -> Icons.Filled.CheckCircle
+                false -> Icons.Filled.RadioButtonUnchecked
+                null -> Icons.Filled.Info
+            },
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(
+                detail, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+// ---------- Preview ----------
 
 @Preview(showBackground = true)
 @Composable
 private fun DashboardPreview() {
     MaterialTheme {
         DashboardScreen(
-            DashboardState(
-                connected = true,
-                connectionType = "Wi-Fi",
+            status = NetworkStatus(
+                type = ConnectionType.WIFI,
+                hasInternetCapability = true,
+                validated = true,
                 localIp = "192.168.1.23",
                 gateway = "192.168.1.1",
-                testResult = "Berhasil (HTTP 204) dalam 143 ms"
-            )
+                dnsServers = listOf("8.8.8.8")
+            ),
+            test = TestResult.Success(204, 143),
+            checked = setOf("admin"),
+            onRunTest = {},
+            onToggleChecklist = {}
         )
     }
 }
