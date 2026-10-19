@@ -44,6 +44,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.datastore.preferences)
     implementation(libs.material)
 
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
