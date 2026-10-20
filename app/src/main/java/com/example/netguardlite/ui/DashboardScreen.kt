@@ -60,7 +60,13 @@ fun DashboardScreen(
                 InfoCard(
                     rows = listOf(
                         Triple(Icons.Filled.Wifi, "Jenis koneksi", status.type.label),
-                        Triple(Icons.Filled.Dns, "IP lokal", status.localIp ?: "Tidak tersedia"),
+                        Triple(
+                            Icons.Filled.Dns, "DNS",
+                            status.dnsServers
+                                .sortedBy { it.contains(':') }   // IPv4 dulu, IPv6 setelahnya
+                                .joinToString("\n")
+                                .ifEmpty { "Tidak tersedia" }
+                        ),
                         Triple(Icons.Filled.Router, "Gateway", status.gateway ?: "Tidak tersedia"),
                         Triple(
                             Icons.Filled.Dns, "DNS",
