@@ -4,14 +4,12 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.netguardlite.model.NetworkStatus
 import com.example.netguardlite.model.TestResult
-import java.sql.Timestamp
-import java.sql.Types
 
 @Entity(tableName = "scan_history")
 data class ScanEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val timestamp: Long,
-    val valconnectionType: String,
+    val connectionType: String,
     val localIp: String?,
     val gateway: String?,
     val vpnActive: Boolean,

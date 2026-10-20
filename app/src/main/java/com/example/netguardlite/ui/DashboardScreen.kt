@@ -35,6 +35,7 @@ fun DashboardScreen(
     onToggleChecklist: (String) -> Unit
 ) {
     Scaffold(
+        contentWindowInsets = WindowInsets(),
         topBar = {
             TopAppBar(
                 title = {
